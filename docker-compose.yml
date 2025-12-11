@@ -7,3 +7,18 @@ services:
       dockerfile: ./Dockerfile
       args:
         - TOR_VERSION=0.4.8.21
+
+  tor-proxy:
+    image: tor-toolchain:latest
+    container_name: tor-proxy
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      args:
+        - TOR_VERSION=0.4.8.21
+    volumes:
+      - ./torrc:/torrc:ro
+    entrypoint: ["tor", "-f", "/torrc"]
+    ports:
+      - "9050:9050"
+      - "9051:9051"
