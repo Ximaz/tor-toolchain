@@ -16,8 +16,6 @@ RUN curl --request GET "${TOR_URL}" \
 
 RUN tar --strip-components=1 -x -f "${TOR_FILE}" -C . -p
 
-RUN ls -altr
-
 RUN apk add automake \
     autoconf
 
