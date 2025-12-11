@@ -24,3 +24,28 @@ docker compose -f docker-compose.yml build
 
 At the end, you should have a new image called `tor-toolchain`, from which you
 can derive new Docker image in order to, let's say, use a custom `torrc` config.
+
+## Tor Proxy
+
+A `tor-proxy` Docker Compose service has been added which lets you setup a Tor
+proxy locally easily. It is a `SOCK5` proxy, reachable on port `9050`, with a
+Controller on port `9051`.
+
+To start the proxy, use the following command :
+```bash
+docker compose -f docker-compose.yml up tor-proxy --build -d
+```
+The default `torrc` configuration can be modified at the root of the project to
+satisfy your needs.
+
+Once started, make sure it works fine before attempting anything else. Use the
+following command to ensure the proxy is reachable and works as expected :
+```bash
+curl -s -x socks5h://127.0.0.1:9050 https://check.torproject.org | \
+grep "Congratulations. This browser is configured to use Tor." >/dev/null && \
+echo "Protected." || "Careful, you are not protected."
+```
+
+If you see `Protected.`, your proxy is setup correctly and locally reachable. If
+not, you should check the logs of the container, something is not working as
+expected, thus you are not protected yet.

@@ -1,0 +1,9 @@
+# Listen on localhost for SOCKS5 connections
+SocksPort 0.0.0.0:9050
+
+# Optional: Control port for Tor management (e.g., for apps like Stem)
+ControlPort 9051
+
+# Optional: Use strict exit policies to prevent Tor from acting as a relay
+ExitRelay 0
+ExitPolicy reject *:*
