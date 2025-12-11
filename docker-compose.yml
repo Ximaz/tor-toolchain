@@ -1,0 +1,8 @@
+services:
+  tor-builder:
+    image: tor-builder:latest
+    container_name: tor-builder
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    restart: unless-stopped
