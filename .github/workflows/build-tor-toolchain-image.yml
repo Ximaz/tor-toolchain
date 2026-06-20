@@ -17,8 +17,8 @@ env:
   REGISTRY: ghcr.io
 
 concurrency:
-  group: docker-build-${{ github.ref }}
-  cancel-in-progress: true
+  group: docker-build-${{ github.ref }}-${{ github.event_name == 'pull_request' && github.event.action != 'closed' && 'validate' || 'publish' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
 
 jobs:
   version-consistency:
