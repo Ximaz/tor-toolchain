@@ -1,4 +1,4 @@
-FROM alpine:3.23.0 AS builder
+FROM alpine:3.24.1 AS builder
 
 WORKDIR /build
 
@@ -46,7 +46,7 @@ RUN cp ./src/app/tor \
     ./src/config/torrc.sample \
     /build/binaries
 
-FROM alpine:3.23.0 AS tor-toolchain
+FROM alpine:3.24.1 AS tor-toolchain
 
 RUN mkdir -p /usr/local/bin
 
