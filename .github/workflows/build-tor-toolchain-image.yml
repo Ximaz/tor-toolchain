@@ -15,7 +15,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/tor-toolchain
 
 concurrency:
   group: docker-build-${{ github.ref }}
@@ -119,6 +118,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set image name (lowercase)
+        env:
+          REPO: ${{ github.repository }}
+        run: echo "IMAGE=${REGISTRY}/$(echo "$REPO" | tr '[:upper:]' '[:lower:]')/tor-toolchain" >> "$GITHUB_ENV"
+
       - name: Build and push by digest (${{ matrix.platform }})
         id: build
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
@@ -128,7 +132,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           sbom: true
           provenance: mode=max
 
@@ -164,6 +168,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Set image name (lowercase)
+        env:
+          REPO: ${{ github.repository }}
+        run: echo "IMAGE=${REGISTRY}/$(echo "$REPO" | tr '[:upper:]' '[:lower:]')/tor-toolchain" >> "$GITHUB_ENV"
+
       - name: Read Tor version from Dockerfile
         id: torver
         run: |
@@ -192,7 +201,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest,enable=${{ (github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch) || (github.event.pull_request.merged == true && github.event.pull_request.base.ref == github.event.repository.default_branch) }}
             type=raw,value=${{ steps.torver.outputs.version }}
@@ -201,7 +210,7 @@ jobs:
       - name: Create the multi-arch manifest from per-arch digests
         working-directory: /tmp/digests
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          IMAGE: ${{ env.IMAGE }}
         run: |
           set -euo pipefail
           tags=()
@@ -214,7 +223,7 @@ jobs:
       - name: Capture the multi-arch manifest digest
         id: digest
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          IMAGE: ${{ env.IMAGE }}
           VERSION: ${{ steps.torver.outputs.version }}
         run: |
           set -euo pipefail
@@ -226,7 +235,7 @@ jobs:
 
       - name: Sign the published image (keyless, OIDC)
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          IMAGE: ${{ env.IMAGE }}
           DIGEST: ${{ steps.digest.outputs.digest }}
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
 
@@ -236,7 +245,7 @@ jobs:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}
+          image-ref: ${{ env.IMAGE }}@${{ steps.digest.outputs.digest }}
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
