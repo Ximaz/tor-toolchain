@@ -1,0 +1,88 @@
+name: Check for a new Tor release
+
+# Watches dist.torproject.org and opens a PR bumping TOR_VERSION when a newer
+# stable release appears. The bump PR is then built and signature-verified by
+# build-tor-toolchain-image.yml before it can be merged.
+#
+# Requires TOR_BUMP_TOKEN, fine-grained token with :
+# - Metadata : Read-Only
+# - Contents : Read-And-Write
+# - Pull Requests : Read-And-Write
+
+on:
+  schedule:
+    - cron: "15 6 * * 1" # weekly, Monday 06:15 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    name: Check dist.torproject.org for a newer Tor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Determine current and latest Tor versions
+        id: versions
+        run: |
+          set -euo pipefail
+          current="$(sed -n 's/^ARG TOR_VERSION="\(.*\)"/\1/p' Dockerfile)"
+          test -n "$current"
+          # Highest stable tor-X.Y.Z.tar.gz on dist (excludes -alpha / -rc).
+          latest="$(curl --fail --proto '=https' --tlsv1.2 -sSL https://dist.torproject.org/ \
+            | grep -oE 'tor-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' \
+            | sed -E 's/^tor-([0-9.]+)\.tar\.gz$/\1/' \
+            | sort -V | tail -1)"
+          test -n "$latest"
+          echo "current=${current}" >> "$GITHUB_OUTPUT"
+          echo "latest=${latest}" >> "$GITHUB_OUTPUT"
+          if [ "$current" != "$latest" ] \
+             && [ "$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -1)" = "$latest" ]; then
+            echo "newer=true" >> "$GITHUB_OUTPUT"
+            echo "A newer Tor release is available: ${current} -> ${latest}"
+          else
+            echo "newer=false" >> "$GITHUB_OUTPUT"
+            echo "Already on the latest Tor release (${current})."
+          fi
+
+      - name: Update TOR_VERSION in the Dockerfile and docker-compose.yml
+        if: steps.versions.outputs.newer == 'true'
+        env:
+          LATEST: ${{ steps.versions.outputs.latest }}
+        run: |
+          set -euo pipefail
+          # Dockerfile ARG (the source CI reads).
+          sed -i -E "s/^(ARG TOR_VERSION=\").*(\")/\1${LATEST}\2/" Dockerfile
+          grep -q "ARG TOR_VERSION=\"${LATEST}\"" Dockerfile
+          # Keep the compose build-arg (used for local builds) in lockstep.
+          # Anchored at line start so the header comment is never touched;
+          # handles both map (TOR_VERSION: x) and list (- TOR_VERSION=x) forms.
+          sed -i -E \
+            -e "s/^([[:space:]]*TOR_VERSION:[[:space:]]*).*/\1${LATEST}/" \
+            -e "s/^([[:space:]]*-[[:space:]]*TOR_VERSION=).*/\1${LATEST}/" \
+            docker-compose.yml
+          grep -qE "TOR_VERSION[[:space:]]*[:=][[:space:]]*${LATEST}" docker-compose.yml
+
+      - name: Open a bump pull request
+        if: steps.versions.outputs.newer == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.TOR_BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          branch: bump-tor-${{ steps.versions.outputs.latest }}
+          delete-branch: true
+          commit-message: "feat: bump Tor ${{ steps.versions.outputs.current }} -> ${{ steps.versions.outputs.latest }}"
+          title: "feat: bump Tor to ${{ steps.versions.outputs.latest }}"
+          body: |
+            Automated bump from the `dist.torproject.org` release watcher.
+
+            - Current: `${{ steps.versions.outputs.current }}`
+            - Latest:  `${{ steps.versions.outputs.latest }}`
+
+            The build-validation workflow compiles this version and verifies its
+            GPG signature against the pinned Tor signing keys before this PR can
+            be merged.
+          labels: dependencies
