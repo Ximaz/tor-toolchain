@@ -1,5 +1,10 @@
-# Listen on localhost for SOCKS5 connections
+# Bind SOCKS5 inside the container on all interfaces. Host exposure is
+# restricted to loopback by the docker-compose port map (127.0.0.1:9050:9050).
 SocksPort 0.0.0.0:9050
+
+# Keep runtime state on the writable tmpfs mounted by docker-compose, since the
+# container rootfs is read-only.
+DataDirectory /var/lib/tor
 
 # Optional: Use strict exit policies to prevent Tor from acting as a relay
 ExitRelay 0
