@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: ./Dockerfile
       args:
-        - TOR_VERSION=0.4.8.21
+        - TOR_VERSION=0.4.9.9
 
   tor-proxy:
     image: tor-toolchain:latest
@@ -15,7 +15,7 @@ services:
       context: .
       dockerfile: ./Dockerfile
       args:
-        - TOR_VERSION=0.4.8.21
+        - TOR_VERSION=0.4.9.9
     volumes:
       - ./torrc:/torrc:ro
     entrypoint: ["tor", "-f", "/torrc"]
