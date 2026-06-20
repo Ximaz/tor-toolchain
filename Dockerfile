@@ -73,3 +73,11 @@ COPY --from=builder /build/binaries/geoip6 /usr/local/share/tor/geoip6
 RUN apk add libevent \
     openssl \
     zlib
+
+RUN addgroup -S tor && \
+    adduser -S -D -H -h /var/lib/tor -G tor tor && \
+    mkdir -p /var/lib/tor && \
+    chown -R tor:tor /var/lib/tor && \
+    chmod 700 /var/lib/tor
+
+USER tor
