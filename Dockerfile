@@ -2,7 +2,7 @@ FROM alpine:3.23.0 AS builder
 
 WORKDIR /build
 
-ARG TOR_VERSION="0.4.8.21"
+ARG TOR_VERSION="0.4.9.9"
 
 ENV TOR_VERSION="${TOR_VERSION}"
 ENV TOR_URL="https://gitlab.torproject.org/tpo/core/tor/-/archive/tor-${TOR_VERSION}/tor-${TOR_VERSION}.tar.gz"
