@@ -20,5 +20,4 @@ services:
       - ./torrc:/torrc:ro
     entrypoint: ["tor", "-f", "/torrc"]
     ports:
-      - "9050:9050"
-      - "9051:9051"
+      - "127.0.0.1:9050:9050"
