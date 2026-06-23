@@ -32,10 +32,14 @@ jobs:
           set -euo pipefail
           current="$(sed -n 's/^ARG TOR_VERSION="\(.*\)"/\1/p' Dockerfile)"
           test -n "$current"
-          # Highest stable tor-X.Y.Z.tar.gz on dist (excludes -alpha / -rc).
+          # Highest stable tor-X.Y.Z.W.tar.gz on dist (excludes -alpha / -rc).
+          # PCRE look-around (GNU grep -P) extracts the bare version directly,
+          # so no sed pass is needed; the numeric-only body also skips
+          # pre-releases such as 0.4.9.1-alpha. `|| true` keeps an empty match
+          # from tripping pipefail so the explicit `test -n` reports a clear
+          # failure instead of a bare "exit code 1".
           latest="$(curl --fail --proto '=https' --tlsv1.2 -sSL https://dist.torproject.org/ \
-            | grep -oE 'tor-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' \
-            | sed -E 's/^tor-([0-9.]+)\.tar\.gz$/\1/' \
+            | { grep -oP '(?<=tor-)\d+\.\d+\.\d+\.\d+(?=\.tar\.gz)' || true; } \
             | sort -V | tail -1)"
           test -n "$latest"
           echo "current=${current}" >> "$GITHUB_OUTPUT"
