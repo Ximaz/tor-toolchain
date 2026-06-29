@@ -2,7 +2,7 @@ x-tor-build: &tor-build
   context: .
   dockerfile: ./Dockerfile
   args:
-    TOR_VERSION: 0.4.9.9
+    TOR_VERSION: 0.4.9.11
 
 services:
   tor-toolchain:
