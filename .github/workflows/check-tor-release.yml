@@ -53,7 +53,7 @@ jobs:
             echo "Already on the latest Tor release (${current})."
           fi
 
-      - name: Update TOR_VERSION in the Dockerfile and docker-compose.yml
+      - name: Update TOR_VERSION in the Dockerfile, docker-compose.yml and README
         if: steps.versions.outputs.newer == 'true'
         env:
           LATEST: ${{ steps.versions.outputs.latest }}
@@ -70,6 +70,17 @@ jobs:
             -e "s/^([[:space:]]*-[[:space:]]*TOR_VERSION=).*/\1${LATEST}/" \
             docker-compose.yml
           grep -qE "TOR_VERSION[[:space:]]*[:=][[:space:]]*${LATEST}" docker-compose.yml
+          # Keep the README's version references current too. Each pattern is
+          # anchored by unambiguous context (backticks, TOR_VERSION=, image tag)
+          # so the socks5h://127.0.0.1:9050 example (also a 4-part number) is
+          # never touched. Replaces whatever version is present rather than the
+          # Dockerfile "current", so it self-heals even if the README drifted.
+          sed -i -E "s/\`[0-9]+(\.[0-9]+){3}\`/\`${LATEST}\`/g" README.md
+          grep -q "\`${LATEST}\`" README.md
+          sed -i -E "s/(TOR_VERSION=)[0-9]+(\.[0-9]+){3}/\1${LATEST}/g" README.md
+          grep -q "TOR_VERSION=${LATEST}" README.md
+          sed -i -E "s/(tor-toolchain:)[0-9]+(\.[0-9]+){3}/\1${LATEST}/g" README.md
+          grep -q "tor-toolchain:${LATEST}" README.md
 
       - name: Open a bump pull request
         if: steps.versions.outputs.newer == 'true'

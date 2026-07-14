@@ -2,6 +2,14 @@
 # restricted to loopback by the docker-compose port map (127.0.0.1:9050:9050).
 SocksPort 0.0.0.0:9050
 
+# Reject "unsafe" SOCKS requests that carry a bare IP address, i.e. the client
+# resolved the hostname itself and would leak it to its local DNS resolver.
+# Clients MUST use socks5h:// (or SOCKS4a) so the hostname is sent to Tor and
+# resolved remotely inside the network. Leaky socks5:// clients now fail loudly
+# instead of silently leaking. Relax this only if you deliberately need to reach
+# literal IP addresses.
+SafeSocks 1
+
 # Keep runtime state on the writable tmpfs mounted by docker-compose, since the
 # container rootfs is read-only.
 DataDirectory /var/lib/tor
