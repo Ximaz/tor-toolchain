@@ -55,6 +55,7 @@ RUN mkdir -p /build/binaries && cp \
     ./src/config/geoip \
     ./src/config/geoip6 \
     ./src/config/torrc.sample \
+    ./LICENSE \
     /build/binaries
 
 FROM alpine:3.24.1 AS tor-toolchain
@@ -73,6 +74,10 @@ COPY --from=builder \
     /usr/local/share/tor/
 
 COPY --from=builder /build/binaries/torrc.sample /usr/local/etc/tor/torrc.sample
+
+COPY --from=builder /build/binaries/LICENSE /usr/local/share/licenses/tor/LICENSE
+
+COPY LICENSE NOTICE /usr/local/share/licenses/tor-toolchain/
 
 RUN apk add --no-cache libevent openssl zlib
 
