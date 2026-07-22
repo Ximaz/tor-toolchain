@@ -1,4 +1,4 @@
-FROM alpine:3.24.1 AS builder
+FROM alpine:3.24.1 AS tor-toolchain-builder
 
 WORKDIR /build
 
@@ -58,9 +58,27 @@ RUN mkdir -p /build/binaries && cp \
     ./LICENSE \
     /build/binaries
 
+# Lyrebird
+FROM golang:tip-20260719-alpine3.23 AS lyrebird-builder
+
+WORKDIR /build
+
+ENV CGO_ENABLED=0
+
+ARG LYREBIRD_VERSION=0.8.1
+
+RUN apk add --no-cache git
+
+RUN git clone https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird.git ./src-lyrebird/
+
+RUN cd ./src-lyrebird/ && \
+    git checkout "lyrebird-${LYREBIRD_VERSION}" && \
+    go build -o ./lyrebird -ldflags="-s -w" ./cmd/lyrebird && \
+    install -Dm0555 ./lyrebird /build/lyrebird
+
 FROM alpine:3.24.1 AS tor-toolchain
 
-COPY --from=builder \
+COPY --from=tor-toolchain-builder \
     /build/binaries/tor \
     /build/binaries/tor-resolve \
     /build/binaries/tor-print-ed-signing-cert \
@@ -68,14 +86,15 @@ COPY --from=builder \
     /build/binaries/torify \
     /usr/local/bin/
 
-COPY --from=builder \
+COPY --from=tor-toolchain-builder \
     /build/binaries/geoip \
     /build/binaries/geoip6 \
     /usr/local/share/tor/
 
-COPY --from=builder /build/binaries/torrc.sample /usr/local/etc/tor/torrc.sample
+COPY --from=tor-toolchain-builder /build/binaries/torrc.sample /usr/local/etc/tor/torrc.sample
+COPY --from=tor-toolchain-builder /build/binaries/LICENSE /usr/local/share/licenses/tor/LICENSE
 
-COPY --from=builder /build/binaries/LICENSE /usr/local/share/licenses/tor/LICENSE
+COPY --from=lyrebird-builder /build/lyrebird /usr/local/bin/lyrebird
 
 COPY LICENSE NOTICE /usr/local/share/licenses/tor-toolchain/
 
