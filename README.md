@@ -42,6 +42,20 @@ docker build --build-arg LYREBIRD_VERSION=0.8.1 -t tor-toolchain .
 Both defaults are mirrored into `docker-compose.yml`, and CI fails the build if
 the two files ever disagree.
 
+### Lyrebird dependency patches
+
+Lyrebird `0.8.1` is the newest upstream release tag, and its `go.mod` pins
+`golang.org/x/crypto`, `golang.org/x/net` and `github.com/pion/interceptor` at
+versions with published HIGH-severity CVEs. The build therefore bumps those
+three modules to fixed releases before compiling, pinned through
+`ARG GO_CRYPTO_VERSION`, `ARG GO_NET_VERSION` and `ARG PION_INTERCEPTOR_VERSION`
+so the result stays reproducible. `go.sum` is regenerated against `sum.golang.org`,
+so the substituted modules remain checksum-verified, and lyrebird's own test
+suite runs against the patched dependency set before the binary is accepted.
+
+These arguments exist to be dropped, not tuned: once upstream tags a release
+carrying the fixes, bump `LYREBIRD_VERSION` and delete the patch step.
+
 For an easy build, there is a `docker-compose.yml` file which builds everything
 for you. To build locally, use this command:
 ```bash

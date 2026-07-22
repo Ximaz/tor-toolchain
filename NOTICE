@@ -84,6 +84,12 @@ obfs4proxy. It is distributed under the 2-clause BSD license.
     ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
     POSSIBILITY OF SUCH DAMAGE.
 
+The lyrebird source is used unmodified, but the build advances three of its
+pinned Go module dependencies (golang.org/x/crypto, golang.org/x/net and
+github.com/pion/interceptor) to releases that fix published CVEs, so the
+compiled binary does not embed the exact dependency versions named in the
+upstream go.mod. All three remain under their original BSD/MIT licensing.
+
 The lyrebird binary is statically linked and therefore also embeds its Go module
 dependencies, whose licenses (the Go standard library and the third-party
 modules listed in the upstream go.mod, all BSD/MIT/Apache-2.0 style) are covered
