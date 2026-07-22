@@ -59,22 +59,42 @@ RUN mkdir -p /build/binaries && cp \
     /build/binaries
 
 # Lyrebird
-FROM golang:tip-20260719-alpine3.23 AS lyrebird-builder
+FROM golang:1.26.5-alpine3.24 AS lyrebird-builder
 
 WORKDIR /build
 
-ENV CGO_ENABLED=0
+ARG LYREBIRD_VERSION="0.8.1"
+ENV LYREBIRD_VERSION="${LYREBIRD_VERSION}"
+ENV LYREBIRD_REPO="https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird.git"
 
-ARG LYREBIRD_VERSION=0.8.1
+ENV CGO_ENABLED=0 \
+    GOFLAGS="-mod=readonly" \
+    GOPROXY="https://proxy.golang.org,direct" \
+    GOSUMDB="sum.golang.org"
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git gnupg
 
-RUN git clone https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird.git ./src-lyrebird/
+RUN set -eu; \
+    GNUPGHOME="$(mktemp -d)"; export GNUPGHOME; \
+    gpg --batch --auto-key-locate nodefault,wkd --locate-keys \
+      meskio@torproject.org shelikhoo@torproject.org cohosh@torproject.org \
+    || gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys \
+      07948FFA64160A425BCD27EAC732B1D1C28F4E2F \
+      40BBCBED223F5EB2A03EF657D7D7A110ABC79A6C \
+      5A618CE840883942BAF1334F009DE379FD9B7B90; \
+    git -c advice.detachedHead=false clone --depth 1 \
+      --branch "lyrebird-${LYREBIRD_VERSION}" "${LYREBIRD_REPO}" src; \
+    git -C src verify-tag --raw "lyrebird-${LYREBIRD_VERSION}" 2>&1 | tee verify.log; \
+    grep -q '^\[GNUPG:\] VALIDSIG' verify.log; \
+    gpgconf --kill all; rm -rf "$GNUPGHOME" verify.log
 
-RUN cd ./src-lyrebird/ && \
-    git checkout "lyrebird-${LYREBIRD_VERSION}" && \
-    go build -o ./lyrebird -ldflags="-s -w" ./cmd/lyrebird && \
-    install -Dm0555 ./lyrebird /build/lyrebird
+RUN mkdir -p /build/binaries && go -C src build -trimpath \
+    -ldflags="-s -w -X main.lyrebirdVersion=${LYREBIRD_VERSION}" \
+    -o /build/binaries/lyrebird ./cmd/lyrebird
+
+RUN chmod 0555 /build/binaries/lyrebird && /build/binaries/lyrebird --version
+
+RUN cp src/LICENSE /build/binaries/LICENSE.lyrebird
 
 FROM alpine:3.24.1 AS tor-toolchain
 
@@ -94,7 +114,10 @@ COPY --from=tor-toolchain-builder \
 COPY --from=tor-toolchain-builder /build/binaries/torrc.sample /usr/local/etc/tor/torrc.sample
 COPY --from=tor-toolchain-builder /build/binaries/LICENSE /usr/local/share/licenses/tor/LICENSE
 
-COPY --from=lyrebird-builder /build/lyrebird /usr/local/bin/lyrebird
+COPY --from=lyrebird-builder --chown=root:root --chmod=0555 \
+    /build/binaries/lyrebird /usr/local/bin/lyrebird
+
+COPY --from=lyrebird-builder /build/binaries/LICENSE.lyrebird /usr/local/share/licenses/lyrebird/LICENSE
 
 COPY LICENSE NOTICE /usr/local/share/licenses/tor-toolchain/
 

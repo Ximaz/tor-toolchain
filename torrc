@@ -19,7 +19,16 @@ ClientOnly 1
 ExitRelay 0
 ExitPolicy reject *:*
 
-UseBridges 1
-ClientTransportPlugin obfs4,meek_lite,webtunnel exec /usr/local/bin/lyrebird
-Bridge obfs4 <ip:port> <key> cert=<cert> iat-mode=0
-Bridge obfs4 <ip:port> <key> cert=<cert> iat-mode=0
+# Register Lyrebird as the handler for its pluggable transports. This only
+# declares the plugin; Tor does not execute it until a Bridge line below
+# actually uses one of these transports, so it is safe to leave enabled.
+ClientTransportPlugin obfs4,meek_lite,webtunnel,snowflake,obfs2,obfs3,scramblesuit exec /usr/local/bin/lyrebird
+
+# Censorship circumvention. Bridges are unlisted entry relays; use them when a
+# direct connection to the Tor network is blocked. Get your own bridge lines
+# from <https://bridges.torproject.org/options> and paste them below, then
+# uncomment "UseBridges 1" -- see "Connecting through obfs4 bridges" in the
+# README.
+# UseBridges 1
+# Bridge obfs4 <ip>:<port> <key> cert=<cert> iat-mode=0
+# Bridge obfs4 <ip>:<port> <key> cert=<cert> iat-mode=0

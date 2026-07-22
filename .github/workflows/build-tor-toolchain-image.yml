@@ -31,14 +31,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Ensure compose TOR_VERSION matches the Dockerfile
+      - name: Ensure the compose build args match the Dockerfile
         run: |
           set -euo pipefail
-          df="$(sed -n 's/^ARG TOR_VERSION="\(.*\)"/\1/p' Dockerfile)"
-          dc="$(sed -n -E 's/^[[:space:]]*-?[[:space:]]*TOR_VERSION[[:space:]]*[:=][[:space:]]*(.*)/\1/p' docker-compose.yml | head -1)"
-          echo "Dockerfile=${df} compose=${dc}"
-          test -n "$df"
-          test "$df" = "$dc"
+          # Every upstream version pinned in the Dockerfile must be mirrored by
+          # the compose build-arg, otherwise a local `docker compose build`
+          # would silently produce a different image than CI does.
+          for arg in TOR_VERSION LYREBIRD_VERSION; do
+            df="$(sed -n -E "s/^ARG ${arg}=\"(.*)\"/\1/p" Dockerfile)"
+            dc="$(sed -n -E "s/^[[:space:]]*-?[[:space:]]*${arg}[[:space:]]*[:=][[:space:]]*(.*)/\1/p" docker-compose.yml | head -1)"
+            echo "${arg}: Dockerfile=${df} compose=${dc}"
+            test -n "$df"
+            test "$df" = "$dc"
+          done
 
   validate:
     name: Validate ${{ matrix.platform }}
