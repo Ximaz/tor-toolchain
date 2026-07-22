@@ -1,8 +1,13 @@
-name: Check for a new Tor release
+name: Check for new upstream releases
 
-# Watches dist.torproject.org and opens a PR bumping TOR_VERSION when a newer
-# stable release appears. The bump PR is then built and signature-verified by
-# build-tor-toolchain-image.yml before it can be merged.
+# Watches the two upstream dependencies this image builds from and opens a
+# bump pull request when a newer stable release appears:
+#   - Tor       -> dist.torproject.org            (ARG TOR_VERSION)
+#   - Lyrebird  -> gitlab.torproject.org git tags (ARG LYREBIRD_VERSION)
+#
+# Each dependency gets its own job and its own PR, so a bump that fails to
+# build never blocks the other one. Every bump PR is compiled and
+# signature-verified by build-tor-toolchain-image.yml before it can be merged.
 #
 # Requires TOR_BUMP_TOKEN, fine-grained token with :
 # - Metadata : Read-Only
@@ -19,7 +24,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  check:
+  tor:
     name: Check dist.torproject.org for a newer Tor
     runs-on: ubuntu-latest
     steps:
@@ -65,16 +70,20 @@ jobs:
           # Keep the compose build-arg (used for local builds) in lockstep.
           # Anchored at line start so the header comment is never touched;
           # handles both map (TOR_VERSION: x) and list (- TOR_VERSION=x) forms.
+          # LYREBIRD_VERSION cannot match: the anchor allows only whitespace
+          # before "TOR_VERSION".
           sed -i -E \
             -e "s/^([[:space:]]*TOR_VERSION:[[:space:]]*).*/\1${LATEST}/" \
             -e "s/^([[:space:]]*-[[:space:]]*TOR_VERSION=).*/\1${LATEST}/" \
             docker-compose.yml
-          grep -qE "TOR_VERSION[[:space:]]*[:=][[:space:]]*${LATEST}" docker-compose.yml
+          grep -qE "^[[:space:]]*-?[[:space:]]*TOR_VERSION[[:space:]]*[:=][[:space:]]*${LATEST}" docker-compose.yml
           # Keep the README's version references current too. Each pattern is
           # anchored by unambiguous context (backticks, TOR_VERSION=, image tag)
           # so the socks5h://127.0.0.1:9050 example (also a 4-part number) is
           # never touched. Replaces whatever version is present rather than the
           # Dockerfile "current", so it self-heals even if the README drifted.
+          # Tor versions are 4-part, Lyrebird's are 3-part, so the backtick
+          # pattern below cannot rewrite a Lyrebird version.
           sed -i -E "s/\`[0-9]+(\.[0-9]+){3}\`/\`${LATEST}\`/g" README.md
           grep -q "\`${LATEST}\`" README.md
           sed -i -E "s/(TOR_VERSION=)[0-9]+(\.[0-9]+){3}/\1${LATEST}/g" README.md
@@ -100,4 +109,83 @@ jobs:
             The build-validation workflow compiles this version and verifies its
             GPG signature against the pinned Tor signing keys before this PR can
             be merged.
+          labels: dependencies
+
+  lyrebird:
+    name: Check gitlab.torproject.org for a newer Lyrebird
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Determine current and latest Lyrebird versions
+        id: versions
+        run: |
+          set -euo pipefail
+          current="$(sed -n 's/^ARG LYREBIRD_VERSION="\(.*\)"/\1/p' Dockerfile)"
+          test -n "$current"
+          # Lyrebird publishes no tarball index, so the release tags in the git
+          # repository are the source of truth. `--refs` drops the peeled
+          # "^{}" entries, and the anchored numeric body keeps both the legacy
+          # obfs4proxy-* tags and any future -alpha/-rc suffix out. `|| true`
+          # keeps an empty match from tripping pipefail so the explicit
+          # `test -n` reports a clear failure instead of a bare "exit code 1".
+          latest="$(git ls-remote --tags --refs \
+            https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird.git \
+            | { grep -oP '(?<=refs/tags/lyrebird-)\d+\.\d+\.\d+$' || true; } \
+            | sort -V | tail -1)"
+          test -n "$latest"
+          echo "current=${current}" >> "$GITHUB_OUTPUT"
+          echo "latest=${latest}" >> "$GITHUB_OUTPUT"
+          if [ "$current" != "$latest" ] \
+             && [ "$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -1)" = "$latest" ]; then
+            echo "newer=true" >> "$GITHUB_OUTPUT"
+            echo "A newer Lyrebird release is available: ${current} -> ${latest}"
+          else
+            echo "newer=false" >> "$GITHUB_OUTPUT"
+            echo "Already on the latest Lyrebird release (${current})."
+          fi
+
+      - name: Update LYREBIRD_VERSION in the Dockerfile, docker-compose.yml and README
+        if: steps.versions.outputs.newer == 'true'
+        env:
+          LATEST: ${{ steps.versions.outputs.latest }}
+        run: |
+          set -euo pipefail
+          # Dockerfile ARG (the source CI reads).
+          sed -i -E "s/^(ARG LYREBIRD_VERSION=\").*(\")/\1${LATEST}\2/" Dockerfile
+          grep -q "ARG LYREBIRD_VERSION=\"${LATEST}\"" Dockerfile
+          # Keep the compose build-arg (used for local builds) in lockstep.
+          sed -i -E \
+            -e "s/^([[:space:]]*LYREBIRD_VERSION:[[:space:]]*).*/\1${LATEST}/" \
+            -e "s/^([[:space:]]*-[[:space:]]*LYREBIRD_VERSION=).*/\1${LATEST}/" \
+            docker-compose.yml
+          grep -qE "^[[:space:]]*-?[[:space:]]*LYREBIRD_VERSION[[:space:]]*[:=][[:space:]]*${LATEST}" docker-compose.yml
+          # README. The backtick pattern is restricted to lines that mention
+          # Lyrebird, so an unrelated three-part number elsewhere in the file
+          # can never be rewritten. Replaces whatever version is present rather
+          # than the Dockerfile "current", so it self-heals if the README drifted.
+          sed -i -E "/[Ll]yrebird/ s/\`[0-9]+(\.[0-9]+){2}\`/\`${LATEST}\`/g" README.md
+          sed -i -E "s/(LYREBIRD_VERSION=)[0-9]+(\.[0-9]+){2}/\1${LATEST}/g" README.md
+          grep -q "LYREBIRD_VERSION=${LATEST}" README.md
+
+      - name: Open a bump pull request
+        if: steps.versions.outputs.newer == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.TOR_BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          branch: bump-lyrebird-${{ steps.versions.outputs.latest }}
+          delete-branch: true
+          commit-message: "feat: bump Lyrebird ${{ steps.versions.outputs.current }} -> ${{ steps.versions.outputs.latest }}"
+          title: "feat: bump Lyrebird to ${{ steps.versions.outputs.latest }}"
+          body: |
+            Automated bump from the `gitlab.torproject.org` release-tag watcher.
+
+            - Current: `${{ steps.versions.outputs.current }}`
+            - Latest:  `${{ steps.versions.outputs.latest }}`
+
+            The build-validation workflow compiles this version and verifies
+            that the `lyrebird-${{ steps.versions.outputs.latest }}` git tag
+            carries a good OpenPGP signature from one of the pinned Tor
+            anti-censorship maintainer keys before this PR can be merged.
           labels: dependencies

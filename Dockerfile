@@ -1,4 +1,4 @@
-FROM alpine:3.24.1 AS builder
+FROM alpine:3.24.1 AS tor-toolchain-builder
 
 WORKDIR /build
 
@@ -58,9 +58,68 @@ RUN mkdir -p /build/binaries && cp \
     ./LICENSE \
     /build/binaries
 
+# Lyrebird
+FROM golang:1.26.5-alpine3.24 AS lyrebird-builder
+
+WORKDIR /build
+
+ARG LYREBIRD_VERSION="0.8.1"
+ENV LYREBIRD_VERSION="${LYREBIRD_VERSION}"
+ENV LYREBIRD_REPO="https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird.git"
+
+ENV CGO_ENABLED=0 \
+    GOFLAGS="-mod=readonly" \
+    GOPROXY="https://proxy.golang.org,direct" \
+    GOSUMDB="sum.golang.org"
+
+RUN apk add --no-cache git gnupg
+
+RUN set -eu; \
+    GNUPGHOME="$(mktemp -d)"; export GNUPGHOME; \
+    gpg --batch --auto-key-locate nodefault,wkd --locate-keys \
+      meskio@torproject.org shelikhoo@torproject.org cohosh@torproject.org \
+    || gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys \
+      07948FFA64160A425BCD27EAC732B1D1C28F4E2F \
+      40BBCBED223F5EB2A03EF657D7D7A110ABC79A6C \
+      5A618CE840883942BAF1334F009DE379FD9B7B90; \
+    git -c advice.detachedHead=false clone --depth 1 \
+      --branch "lyrebird-${LYREBIRD_VERSION}" "${LYREBIRD_REPO}" src; \
+    git -C src verify-tag --raw "lyrebird-${LYREBIRD_VERSION}" 2>&1 | tee verify.log; \
+    grep -q '^\[GNUPG:\] VALIDSIG' verify.log; \
+    gpgconf --kill all; rm -rf "$GNUPGHOME" verify.log
+
+# FIXME: Lyrebird 0.8.1 release tag pins dependencies that carry
+# fixed HIGH-severity CVEs: golang.org/x/crypto (ssh, not linked into the
+# binary), golang.org/x/net (html and idna, which are), and pion/interceptor
+# (reached through snowflake's WebRTC stack). Upstream has no tag with the
+# bumps, so patch the module graph forward before building. Versions are pinned
+# rather than resolved with `-u` so the build stays reproducible; go.sum is
+# regenerated against GOSUMDB, so the new modules are still checksum-verified.
+ARG GO_CRYPTO_VERSION="v0.54.0"
+ARG GO_NET_VERSION="v0.57.0"
+ARG PION_INTERCEPTOR_VERSION="v0.1.46"
+
+RUN GOFLAGS="" go -C src get \
+      "golang.org/x/crypto@${GO_CRYPTO_VERSION}" \
+      "golang.org/x/net@${GO_NET_VERSION}" \
+      "github.com/pion/interceptor@${PION_INTERCEPTOR_VERSION}" && \
+    GOFLAGS="" go -C src mod tidy
+
+# The dependency set no longer matches the one upstream tested against, so run
+# lyrebird's own test suite before trusting the binary.
+RUN go -C src test ./...
+
+RUN mkdir -p /build/binaries && go -C src build -trimpath \
+    -ldflags="-s -w -X main.lyrebirdVersion=${LYREBIRD_VERSION}" \
+    -o /build/binaries/lyrebird ./cmd/lyrebird
+
+RUN chmod 0555 /build/binaries/lyrebird && /build/binaries/lyrebird --version
+
+RUN cp src/LICENSE /build/binaries/LICENSE.lyrebird
+
 FROM alpine:3.24.1 AS tor-toolchain
 
-COPY --from=builder \
+COPY --from=tor-toolchain-builder \
     /build/binaries/tor \
     /build/binaries/tor-resolve \
     /build/binaries/tor-print-ed-signing-cert \
@@ -68,14 +127,18 @@ COPY --from=builder \
     /build/binaries/torify \
     /usr/local/bin/
 
-COPY --from=builder \
+COPY --from=tor-toolchain-builder \
     /build/binaries/geoip \
     /build/binaries/geoip6 \
     /usr/local/share/tor/
 
-COPY --from=builder /build/binaries/torrc.sample /usr/local/etc/tor/torrc.sample
+COPY --from=tor-toolchain-builder /build/binaries/torrc.sample /usr/local/etc/tor/torrc.sample
+COPY --from=tor-toolchain-builder /build/binaries/LICENSE /usr/local/share/licenses/tor/LICENSE
 
-COPY --from=builder /build/binaries/LICENSE /usr/local/share/licenses/tor/LICENSE
+COPY --from=lyrebird-builder --chown=root:root --chmod=0555 \
+    /build/binaries/lyrebird /usr/local/bin/lyrebird
+
+COPY --from=lyrebird-builder /build/binaries/LICENSE.lyrebird /usr/local/share/licenses/lyrebird/LICENSE
 
 COPY LICENSE NOTICE /usr/local/share/licenses/tor-toolchain/
 

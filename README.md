@@ -4,9 +4,17 @@ This repository contains a Dockerfile that, once built, compiles all the Tor
 project binaries. This is specially nice to have when wanting to use Tor as a
 proxy locally without actually installing Tor binaries on your host.
 
-The Tor source is downloaded from the official `https://dist.torproject.org/`
-release server and its GPG signature is verified against the pinned Tor signing
-keys during the build, so a tampered or corrupted tarball aborts the build.
+The image also ships [Lyrebird](https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird)
+(the pluggable-transport suite formerly known as obfs4proxy), so the proxy can
+reach the Tor network through **obfs4 bridges** from a network that blocks Tor.
+
+Both dependencies are verified during the build:
+
+- The Tor source is downloaded from the official `https://dist.torproject.org/`
+  release server and its GPG signature is verified against the pinned Tor
+  signing keys, so a tampered or corrupted tarball aborts the build.
+- Lyrebird is built from its git release tag, which must carry a good OpenPGP
+  signature from one of the pinned Tor anti-censorship maintainer keys.
 
 ## Usage
 
@@ -24,6 +32,29 @@ version, override it at build time:
 ```bash
 docker build --build-arg TOR_VERSION=0.4.9.11 -t tor-toolchain .
 ```
+
+Lyrebird is pinned the same way, by `ARG LYREBIRD_VERSION` (currently `0.8.1`),
+and takes a release number without the `lyrebird-` tag prefix:
+```bash
+docker build --build-arg LYREBIRD_VERSION=0.8.1 -t tor-toolchain .
+```
+
+Both defaults are mirrored into `docker-compose.yml`, and CI fails the build if
+the two files ever disagree.
+
+### Lyrebird dependency patches
+
+Lyrebird `0.8.1` is the newest upstream release tag, and its `go.mod` pins
+`golang.org/x/crypto`, `golang.org/x/net` and `github.com/pion/interceptor` at
+versions with published HIGH-severity CVEs. The build therefore bumps those
+three modules to fixed releases before compiling, pinned through
+`ARG GO_CRYPTO_VERSION`, `ARG GO_NET_VERSION` and `ARG PION_INTERCEPTOR_VERSION`
+so the result stays reproducible. `go.sum` is regenerated against `sum.golang.org`,
+so the substituted modules remain checksum-verified, and lyrebird's own test
+suite runs against the patched dependency set before the binary is accepted.
+
+These arguments exist to be dropped, not tuned: once upstream tags a release
+carrying the fixes, bump `LYREBIRD_VERSION` and delete the patch step.
 
 For an easy build, there is a `docker-compose.yml` file which builds everything
 for you. To build locally, use this command:
