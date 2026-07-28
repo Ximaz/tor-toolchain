@@ -88,21 +88,20 @@ RUN set -eu; \
     grep -q '^\[GNUPG:\] VALIDSIG' verify.log; \
     gpgconf --kill all; rm -rf "$GNUPGHOME" verify.log
 
-# FIXME: Lyrebird 0.8.1 release tag pins dependencies that carry
-# fixed HIGH-severity CVEs: golang.org/x/crypto (ssh, not linked into the
-# binary), golang.org/x/net (html and idna, which are), and pion/interceptor
-# (reached through snowflake's WebRTC stack). Upstream has no tag with the
-# bumps, so patch the module graph forward before building. Versions are pinned
-# rather than resolved with `-u` so the build stays reproducible; go.sum is
-# regenerated against GOSUMDB, so the new modules are still checksum-verified.
 ARG GO_CRYPTO_VERSION="v0.54.0"
 ARG GO_NET_VERSION="v0.57.0"
 ARG PION_INTERCEPTOR_VERSION="v0.1.46"
+ARG PION_DTLS_VERSION="v3.1.5"
+ARG CIRCL_VERSION="v1.6.4"
+ARG EDWARDS25519_VERSION="v1.1.1"
 
 RUN GOFLAGS="" go -C src get \
       "golang.org/x/crypto@${GO_CRYPTO_VERSION}" \
       "golang.org/x/net@${GO_NET_VERSION}" \
-      "github.com/pion/interceptor@${PION_INTERCEPTOR_VERSION}" && \
+      "github.com/pion/interceptor@${PION_INTERCEPTOR_VERSION}" \
+      "github.com/pion/dtls/v3@${PION_DTLS_VERSION}" \
+      "github.com/cloudflare/circl@${CIRCL_VERSION}" \
+      "filippo.io/edwards25519@${EDWARDS25519_VERSION}" && \
     GOFLAGS="" go -C src mod tidy
 
 # The dependency set no longer matches the one upstream tested against, so run
