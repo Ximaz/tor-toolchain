@@ -27,10 +27,10 @@ release version, as published on the official server:
 
 `TOR_VERSION` is the **single source of truth** for the project and lives as the
 default of the `ARG TOR_VERSION` declaration at the top of the `Dockerfile`
-(currently `0.4.9.11`, the latest release as of today). To build a different
+(currently `0.4.9.12`, the latest release as of today). To build a different
 version, override it at build time:
 ```bash
-docker build --build-arg TOR_VERSION=0.4.9.11 -t tor-toolchain .
+docker build --build-arg TOR_VERSION=0.4.9.12 -t tor-toolchain .
 ```
 
 Lyrebird is pinned the same way, by `ARG LYREBIRD_VERSION` (currently `0.8.1`),
@@ -71,13 +71,13 @@ CI builds a multi-arch image (linux/amd64 + linux/arm64) and publishes it to the
 GitHub Container Registry, tagged with `latest`, the Tor version, and the commit
 SHA:
 ```bash
-docker pull ghcr.io/ximaz/tor-toolchain/tor-toolchain:0.4.9.11
+docker pull ghcr.io/ximaz/tor-toolchain/tor-toolchain:0.4.9.12
 ```
 
 The published image is **keyless-signed with cosign** and ships an SBOM and build
 provenance attestation. You can verify the signature with:
 ```bash
-cosign verify ghcr.io/ximaz/tor-toolchain/tor-toolchain:0.4.9.11 \
+cosign verify ghcr.io/ximaz/tor-toolchain/tor-toolchain:0.4.9.12 \
   --certificate-identity-regexp 'https://github.com/ximaz/tor-toolchain/.github/workflows/.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
