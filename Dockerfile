@@ -3,7 +3,7 @@ FROM alpine:3.24.1 AS tor-toolchain-builder
 WORKDIR /build
 
 # Single source of truth for the Tor version (overridable with --build-arg).
-ARG TOR_VERSION="0.4.9.11"
+ARG TOR_VERSION="0.4.9.13"
 ENV TOR_VERSION="${TOR_VERSION}"
 ENV TOR_DIST="https://dist.torproject.org"
 
